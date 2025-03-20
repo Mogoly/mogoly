@@ -1,74 +1,52 @@
 from flask import Flask, render_template, request, jsonify
 import requests
 from bs4 import BeautifulSoup
-from datetime import datetime, timedelta
-import re
 
 app = Flask(__name__)
 
-def get_news(keyword):
+# 🔹 뉴스 크롤링 함수
+def crawl_news(keyword):
     url = f"https://search.naver.com/search.naver?where=news&query={keyword}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
+    
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+    }
 
-    news_items = soup.select('.news_area')[:20]
+    response = requests.get(url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+
+    news_items = soup.select(".news_area")  # 네이버 뉴스 기사 크롤링
     news_list = []
 
     for item in news_items:
-        title = item.select_one('.news_tit').get_text().strip()
-        link = item.select_one('.news_tit')['href']
-        press = item.select_one('.info.press').get_text().strip() if item.select_one('.info.press') else "발간사 정보 없음"
+        title = item.select_one(".news_tit").get_text(strip=True)
+        link = item.select_one(".news_tit")["href"]
+        date = item.select_one(".info")  # 날짜 가져오기
 
-        date_tag = item.select_one('.info_group')
-        date = "날짜 정보 없음"
-        if date_tag:
-            date_texts = [span.get_text().strip() for span in date_tag.find_all(["span", "div", "a"]) if span.get_text().strip()]
-            for text in date_texts:
-                if re.search(r'\d{4}\.\d{1,2}\.\d{1,2}\.\s\d{2}:\d{2}', text):
-                    date = text
-                    break
-                elif re.search(r'\d{4}\.\d{1,2}\.\d{1,2}\.', text):
-                    date = text + " 00:00"
-                    break
-                elif "시간 전" in text or "분 전" in text or "일 전" in text:
-                    date = text
-                    break
-        
-        try:
-            if re.search(r'\d{4}\.\d{1,2}\.\d{1,2}\.\s\d{2}:\d{2}', date):
-                date_obj = datetime.strptime(date, "%Y.%m.%d. %H:%M")
-                date = date_obj.strftime("%Y년 %m월 %d일 %H:%M")
-            elif re.search(r'\d{4}\.\d{1,2}\.\d{1,2}\.', date):
-                date_obj = datetime.strptime(date, "%Y.%m.%d.")
-                date = date_obj.strftime("%Y년 %m월 %d일 00:00")
-            elif "시간 전" in date or "분 전" in date or "일 전" in date:
-                now = datetime.now()
-                if "시간 전" in date:
-                    hours = int(re.search(r'\d+', date).group())
-                    date = (now - timedelta(hours=hours)).strftime("%Y년 %m월 %d일 %H:%M")
-                elif "분 전" in date:
-                    minutes = int(re.search(r'\d+', date).group())
-                    date = (now - timedelta(minutes=minutes)).strftime("%Y년 %m월 %d일 %H:%M")
-                elif "일 전" in date:
-                    days = int(re.search(r'\d+', date).group())
-                    date = (now - timedelta(days=days)).strftime("%Y년 %m월 %d일 %H:%M")
-        except Exception as e:
-            print(f"날짜 변환 오류: {e}")
-            date = "날짜 정보 없음"
+        if date:
+            date = date.get_text(strip=True)
+        else:
+            date = "날짜 없음"
 
-        news_list.append({"press": press, "date": date, "title": title, "link": link})
+        news_list.append({"title": title, "link": link, "date": date})
 
+    print("크롤링 결과:", news_list)  # 🔹 디버깅용 출력 (Render Logs에서 확인 가능)
     return news_list
 
+# 🔹 메인 페이지
 @app.route("/")
 def home():
     return render_template("index.html")
 
+# 🔹 뉴스 검색 엔드포인트 (AJAX 요청 처리)
 @app.route("/search", methods=["POST"])
 def search():
-    keyword = request.form["keyword"]
-    news_results = get_news(keyword)
-    return jsonify(news_results)
+    keyword = request.form.get("keyword")  # 검색어 가져오기
+    if not keyword:
+        return jsonify([])  # 빈 검색어 처리
+    
+    news_data = crawl_news(keyword)
+    return jsonify(news_data)  # JSON 형태로 반환
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(host="0.0.0.0", port=5000, debug=True)
