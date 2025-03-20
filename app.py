@@ -1,3 +1,4 @@
+import os
 from flask import Flask, render_template, request, jsonify
 import requests
 from bs4 import BeautifulSoup
@@ -15,13 +16,13 @@ def crawl_news(keyword):
     response = requests.get(url, headers=headers)
     soup = BeautifulSoup(response.text, "html.parser")
 
-    news_items = soup.select(".news_area")  # 네이버 뉴스 기사 크롤링
+    news_items = soup.select(".news_area")  
     news_list = []
 
     for item in news_items:
         title = item.select_one(".news_tit").get_text(strip=True)
         link = item.select_one(".news_tit")["href"]
-        date = item.select_one(".info")  # 날짜 가져오기
+        date = item.select_one(".info")  
 
         if date:
             date = date.get_text(strip=True)
@@ -30,7 +31,7 @@ def crawl_news(keyword):
 
         news_list.append({"title": title, "link": link, "date": date})
 
-    print("크롤링 결과:", news_list)  # 🔹 디버깅용 출력 (Render Logs에서 확인 가능)
+    print("크롤링 결과:", news_list)  
     return news_list
 
 # 🔹 메인 페이지
@@ -38,15 +39,17 @@ def crawl_news(keyword):
 def home():
     return render_template("index.html")
 
-# 🔹 뉴스 검색 엔드포인트 (AJAX 요청 처리)
+# 🔹 뉴스 검색 엔드포인트
 @app.route("/search", methods=["POST"])
 def search():
-    keyword = request.form.get("keyword")  # 검색어 가져오기
+    keyword = request.form.get("keyword")
     if not keyword:
-        return jsonify([])  # 빈 검색어 처리
+        return jsonify([])
     
     news_data = crawl_news(keyword)
-    return jsonify(news_data)  # JSON 형태로 반환
+    return jsonify(news_data)
 
+# 🔹 서버 실행 (Render의 PORT 환경변수 사용)
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Render 환경변수 사용, 기본값 5000
+    app.run(host="0.0.0.0", port=port, debug=True)
